@@ -1,0 +1,445 @@
+{
+  "project": "Writegeist",
+  "branchName": "ralph/writegeist-v1",
+  "description": "Interactive .NET CLI tool that clones a person's writing style from social media posts and generates platform-specific content on demand",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Solution scaffolding and project structure",
+      "description": "As a developer, I need the .NET solution with all projects, references, and NuGet packages so that I can start building features.",
+      "acceptanceCriteria": [
+        "Writegeist.sln with four projects: Writegeist.Cli, Writegeist.Core, Writegeist.Infrastructure, Writegeist.Tests",
+        "All projects target net10.0",
+        "Project references wired: Cli references Core + Infrastructure, Infrastructure references Core, Tests references Core + Infrastructure",
+        "Writegeist.Cli references DevJonny.InteractiveCli NuGet package",
+        "Writegeist.Infrastructure references Microsoft.Data.Sqlite and AngleSharp",
+        "Writegeist.Tests references xunit, FluentAssertions, and NSubstitute",
+        "Program.cs bootstraps InteractiveCli with a MainMenu that displays menu items and quits cleanly",
+        "MainMenu is a top-level menu (isTopLevel: true) with a placeholder menu item",
+        "dotnet build succeeds with no errors",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Domain models",
+      "description": "As a developer, I need the core domain models defined so that repositories and services can use them.",
+      "acceptanceCriteria": [
+        "Person model in Writegeist.Core/Models with Id (int), Name (string), CreatedAt (DateTime)",
+        "RawPost model with Id, PersonId, Platform, Content, ContentHash, SourceUrl, FetchedAt",
+        "Platform enum with values: LinkedIn, X, Instagram, Facebook",
+        "StyleProfile model with Id, PersonId, ProfileJson, Provider, Model, CreatedAt",
+        "GeneratedDraft model with Id, PersonId, StyleProfileId, Platform, Topic, Content, ParentDraftId (nullable), Feedback (nullable), Provider, Model, CreatedAt",
+        "FetchRequest record with nullable Url, Handle, FilePath properties",
+        "FetchedPost record with Content, nullable SourceUrl, nullable PublishedAt",
+        "dotnet build succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Core interfaces",
+      "description": "As a developer, I need the core interfaces defined so that infrastructure implementations can be built against them.",
+      "acceptanceCriteria": [
+        "IPersonRepository interface in Writegeist.Core/Interfaces with CreateAsync, GetByNameAsync, GetAllAsync, GetOrCreateAsync",
+        "IPostRepository interface with AddAsync, GetByPersonIdAsync, GetCountByPersonIdAsync, ExistsByHashAsync",
+        "IStyleProfileRepository interface with SaveAsync, GetLatestByPersonIdAsync, GetAllByPersonIdAsync",
+        "IDraftRepository interface with SaveAsync, GetLatestAsync, GetByIdAsync",
+        "IContentFetcher interface with Platform property and FetchPostsAsync method",
+        "ILlmProvider interface with ProviderName, ModelName properties and AnalyseStyleAsync, GeneratePostAsync, RefinePostAsync methods",
+        "dotnet build succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "SQLite database and schema initialisation",
+      "description": "As a developer, I need the SQLite database created with the correct schema so that data persists locally.",
+      "acceptanceCriteria": [
+        "SqliteDatabase class in Writegeist.Infrastructure/Persistence with EnsureCreated method",
+        "Creates persons table with id (autoincrement PK), name (unique, not null), created_at (default now)",
+        "Creates raw_posts table with FK to persons, platform, content, content_hash, source_url, fetched_at, unique constraint on (person_id, content_hash)",
+        "Creates style_profiles table with FK to persons, profile_json, provider, model, created_at",
+        "Creates generated_drafts table with FK to persons and style_profiles, parent_draft_id self-ref FK, platform, topic, content, feedback, provider, model, created_at",
+        "Schema creation is idempotent (uses CREATE TABLE IF NOT EXISTS)",
+        "Database path configurable via IConfiguration (Writegeist:DatabasePath key)",
+        "Unit tests verify all four tables are created using in-memory SQLite",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Person repository implementation",
+      "description": "As a developer, I need the person repository so that persons can be stored and retrieved.",
+      "acceptanceCriteria": [
+        "SqlitePersonRepository implements IPersonRepository",
+        "CreateAsync inserts a new person and returns the model with the generated Id",
+        "GetByNameAsync performs case-insensitive lookup and returns null if not found",
+        "GetAllAsync returns all persons ordered by name",
+        "GetOrCreateAsync returns existing person if name matches (case-insensitive), creates new one if not",
+        "Unit tests with in-memory SQLite cover create, get by name, get all, get-or-create (existing), get-or-create (new)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Post repository implementation",
+      "description": "As a developer, I need the post repository so that ingested posts can be stored and deduplicated.",
+      "acceptanceCriteria": [
+        "SqlitePostRepository implements IPostRepository",
+        "AddAsync inserts a post and returns a result indicating whether it was new or a duplicate",
+        "Content hash is SHA-256 of normalised (trimmed, lowercased) content text",
+        "Duplicate detection uses the unique constraint on (person_id, content_hash)",
+        "GetByPersonIdAsync returns all posts for a person ordered by fetched_at",
+        "GetCountByPersonIdAsync returns the count of posts for a person",
+        "Unit tests cover add new, add duplicate, retrieval, and count",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Style profile repository implementation",
+      "description": "As a developer, I need the style profile repository so that analysed profiles can be stored and retrieved.",
+      "acceptanceCriteria": [
+        "SqliteStyleProfileRepository implements IStyleProfileRepository",
+        "SaveAsync inserts a profile and returns the model with generated Id",
+        "GetLatestByPersonIdAsync returns the most recent profile by created_at, or null if none exist",
+        "GetAllByPersonIdAsync returns all profiles for a person ordered by created_at descending",
+        "Unit tests cover save, retrieve latest, retrieve all, and null case",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Draft repository implementation",
+      "description": "As a developer, I need the draft repository so that generated and refined drafts can be stored and chained.",
+      "acceptanceCriteria": [
+        "SqliteDraftRepository implements IDraftRepository",
+        "SaveAsync inserts a draft and returns the model with generated Id",
+        "GetLatestAsync returns the most recently created draft across all persons, or null if none exist",
+        "GetByIdAsync returns a draft by Id, or null if not found",
+        "parent_draft_id correctly links refined drafts to their predecessors",
+        "Unit tests cover save, get latest, get by id, parent-child linking, and null cases",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Manual fetcher — file import",
+      "description": "As a user, I want to import posts from a text file so that I can feed Writegeist content without API access.",
+      "acceptanceCriteria": [
+        "ManualFetcher class in Writegeist.Infrastructure/Fetchers implements IContentFetcher",
+        "Platform property returns a configurable platform value (set at construction)",
+        "FetchPostsAsync reads a file path from FetchRequest.FilePath",
+        "Splits file content on lines containing only --- as separator",
+        "Trims whitespace from each post and skips empty entries",
+        "Returns a list of FetchedPost records with content populated",
+        "Unit tests cover: normal file with multiple posts, empty file, file with no separators (single post), file with consecutive separators",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Platform conventions",
+      "description": "As a developer, I need platform-specific rules so that generated posts follow each platform's norms.",
+      "acceptanceCriteria": [
+        "PlatformRules record in Writegeist.Core with Name, MaxCharacters (nullable int), RecommendedMaxLength, SupportsHashtags, RecommendedHashtagCount, HashtagPlacement, SupportsEmoji, EmojiGuidance, ToneGuidance, FormattingNotes",
+        "PlatformConventions class with static GetRules(Platform) method",
+        "LinkedIn: 3000 max, 1500 recommended, hashtags end, 3-5 count, emoji sparingly",
+        "X: 280 max, 280 recommended, hashtags inline, 1-2 count, emoji moderate",
+        "Instagram: 2200 max, 750 recommended, hashtags end in separate block, up to 30, emoji freely",
+        "Facebook: 63206 max, 600 recommended, hashtags end, 1-3 count, emoji moderate",
+        "Unit tests verify rules for all four platforms",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Anthropic LLM provider",
+      "description": "As a user, I want to use Claude as the LLM backend so that I can analyse style and generate posts.",
+      "acceptanceCriteria": [
+        "AnthropicProvider class in Writegeist.Infrastructure/LlmProviders implements ILlmProvider",
+        "Uses official Anthropic NuGet SDK if available, otherwise raw HttpClient to https://api.anthropic.com/v1/messages",
+        "API key read from ANTHROPIC_API_KEY environment variable via IConfiguration",
+        "Model name configurable via appsettings.json (Writegeist:Anthropic:Model), defaults to claude-sonnet-4-20250514",
+        "ProviderName returns 'anthropic', ModelName returns the configured model",
+        "AnalyseStyleAsync, GeneratePostAsync, RefinePostAsync all send the prompt and return the text response",
+        "Throws a descriptive exception if API key is not configured",
+        "Handles HTTP errors (401, 429, 500) with user-friendly exception messages",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "OpenAI LLM provider",
+      "description": "As a user, I want to use OpenAI as an alternative LLM backend.",
+      "acceptanceCriteria": [
+        "OpenAiProvider class in Writegeist.Infrastructure/LlmProviders implements ILlmProvider",
+        "Uses official OpenAI NuGet package",
+        "API key read from OPENAI_API_KEY environment variable via IConfiguration",
+        "Model name configurable via appsettings.json (Writegeist:OpenAi:Model), defaults to gpt-4o",
+        "ProviderName returns 'openai', ModelName returns the configured model",
+        "AnalyseStyleAsync, GeneratePostAsync, RefinePostAsync all send the prompt and return the text response",
+        "Throws a descriptive exception if API key is not configured",
+        "Handles HTTP errors with user-friendly exception messages",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Style analyser service",
+      "description": "As a developer, I need the style analysis orchestration so that ingested posts can be turned into a style profile.",
+      "acceptanceCriteria": [
+        "StyleAnalyser class in Writegeist.Core/Services",
+        "Constructor takes IPostRepository, IStyleProfileRepository, and ILlmProvider",
+        "AnalyseAsync(int personId) loads all posts for the person, builds the style analysis prompt with all post contents, sends to LLM, and stores the result",
+        "Uses the style analysis prompt template from the implementation plan (section 7.1)",
+        "Returns the saved StyleProfile model",
+        "Throws if no posts exist for the person",
+        "Unit tests with mocked dependencies verify prompt construction and profile storage",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Post generator service",
+      "description": "As a developer, I need the post generation orchestration so that drafts can be created from a style profile and topic.",
+      "acceptanceCriteria": [
+        "PostGenerator class in Writegeist.Core/Services",
+        "Constructor takes IStyleProfileRepository, IDraftRepository, and ILlmProvider",
+        "GenerateAsync(int personId, Platform platform, string topic) loads latest style profile, gets platform conventions, builds generation prompt, sends to LLM, stores draft",
+        "Uses the generation prompt template from the implementation plan (section 7.2)",
+        "RefineAsync(int draftId, string feedback) loads draft, its style profile, builds refinement prompt, sends to LLM, stores new draft linked to previous",
+        "Uses the refinement prompt template from the implementation plan (section 7.3)",
+        "Returns the saved GeneratedDraft model",
+        "Throws if no style profile exists for the person",
+        "Unit tests with mocked dependencies verify prompt construction and draft storage",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "DI registration and appsettings.json",
+      "description": "As a developer, I need all services, repositories, and providers registered in DI so that actions can resolve them.",
+      "acceptanceCriteria": [
+        "Program.cs configureServices lambda registers: SqliteDatabase, all four repositories, StyleAnalyser, PostGenerator, both LLM providers, ManualFetcher",
+        "LLM providers registered as keyed services or via a factory that resolves by provider name string",
+        "appsettings.json contains Writegeist section with DefaultProvider, DatabasePath, Anthropic:Model, OpenAi:Model",
+        "SqliteDatabase.EnsureCreated() called during startup",
+        "dotnet build succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Ingest menu and file import action",
+      "description": "As a user, I want an Ingest Posts sub-menu with a From File action so that I can import posts from a text file.",
+      "acceptanceCriteria": [
+        "IngestMenu class extends Menu (quitable: false, isTopLevel: false) with BuildMenu adding From File, Interactive Paste, From URL / Handle menu items",
+        "MainMenu adds IngestMenu as 'Ingest Posts' menu item",
+        "IngestFromFileAction extends SingleActionAsync",
+        "Prompts for person name via Spectre.Console TextPrompt",
+        "Prompts for platform via Spectre.Console SelectionPrompt (LinkedIn, X, Instagram, Facebook)",
+        "Prompts for file path via TextPrompt",
+        "Uses IPersonRepository.GetOrCreateAsync to ensure person exists",
+        "Uses ManualFetcher to read the file, then stores each post via IPostRepository.AddAsync",
+        "Displays a Spectre.Console Panel summary: count of new posts (green), duplicates skipped (yellow)",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Interactive paste action",
+      "description": "As a user, I want to paste posts one at a time in an interactive session.",
+      "acceptanceCriteria": [
+        "IngestInteractiveAction extends RepeatableActionAsync",
+        "On first iteration, prompts for person name and platform via Spectre.Console prompts",
+        "Each iteration prompts for post content via TextPrompt",
+        "Stores each post via IPostRepository.AddAsync with content hash dedup",
+        "After each post, asks 'Add another post?' — returns false to continue, true to stop",
+        "On completion, displays Panel summary with total new posts and duplicates skipped",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Analyse style action",
+      "description": "As a user, I want a menu action to analyse my posts and build a style profile.",
+      "acceptanceCriteria": [
+        "AnalyseAction extends SingleActionAsync, added to MainMenu as 'Analyse Style'",
+        "Prompts user to select a person from existing persons via SelectionPrompt (shows error if none exist)",
+        "Prompts user to select LLM provider via SelectionPrompt (Anthropic, OpenAI) with default from config",
+        "Calls StyleAnalyser.AnalyseAsync with the selected person",
+        "Displays spinner via AnsiConsole.Status() while LLM processes",
+        "Displays the profile summary in a styled Panel after completion",
+        "Catches and displays errors in red markup without crashing the menu loop",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Generate post action",
+      "description": "As a user, I want a menu action to generate a new post in my style for a specific platform.",
+      "acceptanceCriteria": [
+        "GenerateAction extends SingleActionAsync, added to MainMenu as 'Generate Post'",
+        "Prompts user to select a person (only persons with a style profile) via SelectionPrompt",
+        "Prompts user to select target platform via SelectionPrompt",
+        "Prompts user to enter topic/key points via TextPrompt",
+        "Calls PostGenerator.GenerateAsync with person, platform, and topic",
+        "Displays spinner via AnsiConsole.Status() while LLM processes",
+        "Displays the generated post in a styled Panel with border and title",
+        "Catches and displays errors in red markup without crashing",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Refine draft action",
+      "description": "As a user, I want a menu action to iteratively refine the last generated draft with feedback.",
+      "acceptanceCriteria": [
+        "RefineAction extends RepeatableActionAsync, added to MainMenu as 'Refine Last Draft'",
+        "On first iteration, loads the most recent GeneratedDraft and displays it in a Panel (shows error if none exist)",
+        "Prompts for feedback via TextPrompt",
+        "Calls PostGenerator.RefineAsync with the draft ID and feedback",
+        "Displays spinner via AnsiConsole.Status() while LLM processes",
+        "Displays the refined post in a styled Panel",
+        "Asks 'Refine again?' — returns false to continue looping, true to stop and return to menu",
+        "Catches and displays errors in red markup without crashing",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Profile menu and actions",
+      "description": "As a user, I want to view and list style profiles from the menu.",
+      "acceptanceCriteria": [
+        "ProfileMenu extends Menu (quitable: false, isTopLevel: false) with Show Profile and List All Profiles items",
+        "MainMenu adds ProfileMenu as 'Profiles' menu item",
+        "ShowProfileAction extends SingleActionAsync, prompts for person selection, displays full style profile in a formatted Spectre.Console Table with grouped sections (vocabulary, tone, formatting, etc.)",
+        "ListProfilesAction extends SingleActionAsync, displays a Table of all persons with profiles showing name, provider, model, and created date",
+        "Both actions show a message if no profiles exist",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Stub fetchers for unsupported platforms",
+      "description": "As a developer, I need stub fetchers for LinkedIn, Instagram, and Facebook that guide users to manual input.",
+      "acceptanceCriteria": [
+        "LinkedInFetcher, InstagramFetcher, FacebookFetcher each implement IContentFetcher in Writegeist.Infrastructure/Fetchers",
+        "Each returns the correct Platform enum value from the Platform property",
+        "FetchPostsAsync throws a descriptive exception explaining automated fetching is not available for this platform",
+        "Exception message suggests using From File or Interactive Paste instead",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Ingest from URL action and fetcher dispatch",
+      "description": "As a user, I want to ingest posts from a URL or handle, with clear error messages for unsupported platforms.",
+      "acceptanceCriteria": [
+        "IngestFromUrlAction extends SingleActionAsync, wired into IngestMenu as 'From URL / Handle'",
+        "Prompts for person name, platform, and URL or handle via Spectre.Console prompts",
+        "Resolves the correct IContentFetcher by platform (using DI factory or keyed services)",
+        "Calls FetchPostsAsync and stores results via IPostRepository.AddAsync",
+        "Catches fetcher exceptions for unsupported platforms and displays the message in yellow markup",
+        "Displays Panel summary for successful fetches",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "X/Twitter API fetcher",
+      "description": "As a user, I want to fetch recent tweets automatically via the X API.",
+      "acceptanceCriteria": [
+        "XTwitterFetcher in Writegeist.Infrastructure/Fetchers implements IContentFetcher for Platform.X",
+        "Uses HttpClient to call X API v2 GET /2/users/{id}/tweets endpoint",
+        "Bearer token read from X_BEARER_TOKEN environment variable",
+        "Fetches up to 100 recent tweets per request",
+        "Handles 429 rate limit responses with a user-friendly message suggesting to wait and retry",
+        "Throws descriptive exception if no bearer token is configured, suggesting manual input instead",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
