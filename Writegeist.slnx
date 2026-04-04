@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Writegeist.Cli/Writegeist.Cli.csproj" />
+    <Project Path="src/Writegeist.Core/Writegeist.Core.csproj" />
+    <Project Path="src/Writegeist.Infrastructure/Writegeist.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Writegeist.Tests/Writegeist.Tests.csproj" />
+  </Folder>
+</Solution>
