@@ -1,0 +1,118 @@
+# Ralph Progress Log
+Started: Sat  4 Apr 2026 19:22:24 BST
+
+## Codebase Patterns
+- Test in-memory SQLite with shared cache: use `file:test_{guid}?mode=memory&cache=shared` as DB path so SqliteDatabase and verification connection share the same DB
+- SqliteDatabase.ConnectionString is public — use it for repository constructors that need to create their own connections
+- Repository pattern: constructor takes SqliteDatabase, stores ConnectionString, creates new SqliteConnection per method call
+- Use COLLATE NOCASE in WHERE clauses for case-insensitive text matching in SQLite
+- dotnet build/test require sandbox disabled (NuGet restore needs network + global cache access)
+- SQLite datetime('now') default has second granularity — don't rely on insertion order in tests when rows are inserted rapidly
+- Use INSERT OR IGNORE + unique constraint for dedup; check rowsAffected > 0 to distinguish new vs duplicate
+- Use secondary ORDER BY id DESC as tiebreaker for "latest" queries when datetime('now') produces same-second timestamps
+- Core interfaces live in Writegeist.Core/Interfaces: IPersonRepository, IPostRepository, IStyleProfileRepository, IDraftRepository, IContentFetcher, ILlmProvider
+- Domain models live in Writegeist.Core/Models: Person, RawPost, StyleProfile, GeneratedDraft (classes), FetchRequest, FetchedPost (records), Platform (enum)
+- DevJonny.InteractiveCli v2.4.0: Menu(quitable, isTopLevel) base class with abstract BuildMenu() using protected MenuBuilder field
+- MenuBuilder.AddMenuItem<TAction>(name, description) where TAction : IAmAnAction — name is display text, description is tooltip
+- Actions: SingleActionAsync (override SingleAsyncAction), RepeatableActionAsync (override RepeatableAsyncAction returning bool to stop)
+- Bootstrapping: Host.CreateDefaultBuilder(args).AddInteractiveCli().Build().UseInteractiveCli((EmptyOptions _) => new MainMenu(), args)
+- Solution uses .slnx format (net10.0), projects under src/ and tests/
+- Cli references Core + Infrastructure; Infrastructure references Core; Tests references Core + Infrastructure
+---
+
+## 2026-04-04 - US-001
+- Scaffolded Writegeist.sln with four projects: Cli, Core, Infrastructure, Tests
+- All projects target net10.0 with project references wired correctly
+- NuGet packages: DevJonny.InteractiveCli, Microsoft.Extensions.Hosting (Cli); Microsoft.Data.Sqlite, AngleSharp (Infra); xunit, FluentAssertions, NSubstitute (Tests)
+- Program.cs bootstraps InteractiveCli with MainMenu (isTopLevel: true) and a PlaceholderAction
+- Files changed: Writegeist.slnx, src/Writegeist.Cli/*, src/Writegeist.Core/*.csproj, src/Writegeist.Infrastructure/*.csproj, tests/Writegeist.Tests/*.csproj
+- **Learnings for future iterations:**
+  - dotnet new commands need sandbox disabled for ~/.templateengine access
+  - InteractiveCli MenuBuilder.AddMenuItem is generic: AddMenuItem<T>(name, desc) — T must implement IAmAnAction
+  - UseInteractiveCli needs explicit type arg: UseInteractiveCli((EmptyOptions _) => new MainMenu(), args)
+  - Solution created as .slnx format by default on net10.0
+---
+
+## 2026-04-04 - US-002
+- Created all domain models in Writegeist.Core/Models
+- Person, RawPost, StyleProfile, GeneratedDraft as classes with properties
+- Platform enum with LinkedIn, X, Instagram, Facebook
+- FetchRequest record with nullable Url, Handle, FilePath
+- FetchedPost record with Content, nullable SourceUrl, nullable PublishedAt
+- Files changed: src/Writegeist.Core/Models/{Person,RawPost,StyleProfile,GeneratedDraft,Platform,FetchRequest,FetchedPost}.cs
+- **Learnings for future iterations:**
+  - Classes used for entities with mutable Id (set by DB), records for immutable value objects
+  - All nullable properties use C# nullable reference types (string?, int?, DateTime?)
+---
+
+## 2026-04-04 - US-003
+- Created all core interfaces in Writegeist.Core/Interfaces
+- IPersonRepository: CreateAsync, GetByNameAsync, GetAllAsync, GetOrCreateAsync
+- IPostRepository: AddAsync (returns bool for new vs duplicate), GetByPersonIdAsync, GetCountByPersonIdAsync, ExistsByHashAsync
+- IStyleProfileRepository: SaveAsync, GetLatestByPersonIdAsync, GetAllByPersonIdAsync
+- IDraftRepository: SaveAsync, GetLatestAsync, GetByIdAsync
+- IContentFetcher: Platform property, FetchPostsAsync method
+- ILlmProvider: ProviderName, ModelName properties, AnalyseStyleAsync, GeneratePostAsync, RefinePostAsync methods
+- Files changed: src/Writegeist.Core/Interfaces/{IPersonRepository,IPostRepository,IStyleProfileRepository,IDraftRepository,IContentFetcher,ILlmProvider}.cs
+- **Learnings for future iterations:**
+  - IPostRepository.AddAsync returns bool (true = new post, false = duplicate) — simplifies dedup tracking in actions
+  - ILlmProvider methods all take a single string prompt and return string — keeps interface simple
+---
+
+## 2026-04-04 - US-004
+- Created SqliteDatabase class in Writegeist.Infrastructure/Persistence
+- Schema creates 4 tables: persons, raw_posts, style_profiles, generated_drafts with correct FKs and constraints
+- Idempotent via CREATE TABLE IF NOT EXISTS
+- Database path configurable via IConfiguration["Writegeist:DatabasePath"], defaults to writegeist.db
+- Added Microsoft.Extensions.Configuration.Abstractions package to Infrastructure
+- 6 unit tests verify table creation, idempotency, and column presence for all tables
+- Files changed: src/Writegeist.Infrastructure/{Writegeist.Infrastructure.csproj,Persistence/SqliteDatabase.cs}, tests/Writegeist.Tests/Persistence/SqliteDatabaseTests.cs
+- **Learnings for future iterations:**
+  - Use shared cache in-memory SQLite for tests: `file:test_{guid}?mode=memory&cache=shared`
+  - SqliteDatabase exposes ConnectionString property for repos to create connections
+  - SQLite stores dates as TEXT with datetime('now') default
+---
+
+## 2026-04-04 - US-005
+- Implemented SqlitePersonRepository with CreateAsync, GetByNameAsync, GetAllAsync, GetOrCreateAsync
+- 7 unit tests: create, get by name, case-insensitive lookup, not found returns null, get all ordered, get-or-create existing, get-or-create new
+- Files changed: src/Writegeist.Infrastructure/Persistence/SqlitePersonRepository.cs, tests/Writegeist.Tests/Persistence/SqlitePersonRepositoryTests.cs
+- **Learnings for future iterations:**
+  - Repository constructor takes SqliteDatabase, extracts ConnectionString, creates new SqliteConnection per method
+  - Use COLLATE NOCASE for case-insensitive matching in SQLite queries
+  - ReadPerson helper maps SqliteDataReader columns by ordinal position
+  - dotnet build/test commands need sandbox disabled for NuGet/global cache access
+---
+
+## 2026-04-04 - US-006
+- Implemented SqlitePostRepository with AddAsync (INSERT OR IGNORE for dedup), GetByPersonIdAsync, GetCountByPersonIdAsync, ExistsByHashAsync
+- SHA-256 hash computed from normalised (trimmed, lowercased) content via static ComputeHash method
+- 8 unit tests: add new, add duplicate, normalised hash dedup, retrieval, count, exists by hash (true/false), hash format
+- Files changed: src/Writegeist.Infrastructure/Persistence/SqlitePostRepository.cs, tests/Writegeist.Tests/Persistence/SqlitePostRepositoryTests.cs
+- **Learnings for future iterations:**
+  - Use INSERT OR IGNORE with unique constraint for dedup — returns rowsAffected=0 for duplicates
+  - SQLite datetime('now') has second granularity — don't test ordering when rows inserted in same second
+  - ComputeHash is public static for testability and reuse in fetchers
+---
+
+## 2026-04-04 - US-007
+- Implemented SqliteStyleProfileRepository with SaveAsync, GetLatestByPersonIdAsync, GetAllByPersonIdAsync
+- ORDER BY created_at DESC, id DESC used for "latest" queries to handle same-second inserts
+- 5 unit tests: save, get latest, get latest null, get all descending, get all empty
+- Files changed: src/Writegeist.Infrastructure/Persistence/SqliteStyleProfileRepository.cs, tests/Writegeist.Tests/Persistence/SqliteStyleProfileRepositoryTests.cs
+- **Learnings for future iterations:**
+  - Use secondary ORDER BY id DESC as tiebreaker when datetime('now') produces same timestamps
+  - All repos follow identical pattern: constructor(SqliteDatabase), store ConnectionString, new connection per method
+---
+
+## 2026-04-04 - US-008
+- Implemented SqliteDraftRepository with SaveAsync, GetLatestAsync, GetByIdAsync
+- Handles nullable ParentDraftId and Feedback with DBNull.Value
+- Uses shared SelectColumns constant to avoid repeating column list
+- 7 unit tests: save, get latest, get latest null, get by id, get by id null, parent-child linking, nullable fields
+- Files changed: src/Writegeist.Infrastructure/Persistence/SqliteDraftRepository.cs, tests/Writegeist.Tests/Persistence/SqliteDraftRepositoryTests.cs
+- **Learnings for future iterations:**
+  - Use DBNull.Value for nullable parameters in SQLite commands: (object?)value ?? DBNull.Value
+  - Test setup for drafts requires inserting person AND style_profile first (FK constraints)
+  - All four repository implementations are now complete and follow the same pattern
+---
