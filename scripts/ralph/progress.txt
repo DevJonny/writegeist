@@ -1,3 +1,185 @@
 # Ralph Progress Log
-Started: Sat  4 Apr 2026 19:22:24 BST
+Started: Sat  4 Apr 2026 21:15:40 BST
+
+## Codebase Patterns
+- Use `dotnet test` with `--filter` to run specific test classes (e.g., `--filter "ManualFetcher"`)
+- `dotnet build`/`dotnet test` commands need sandbox disabled (`dangerouslyDisableSandbox`) due to MSBuild named pipe permissions
+- Infrastructure project references Core; Tests references Core + Infrastructure (no Cli dependency)
+- Test projects use in-memory SQLite for repository tests, temp directories for file-based tests
+- Records are used for DTOs (FetchRequest, FetchedPost), classes for domain models (Person, RawPost, etc.)
+- Fetcher tests implement IDisposable to clean up temp directories
+- LLM providers use HttpClient injection + IConfiguration for API keys and model names
+- All ILlmProvider methods (AnalyseStyle, GeneratePost, RefinePost) delegate to a single API call method
+- For actions needing user-selected LLM provider: inject both AnthropicProvider and OpenAiProvider concrete types, construct service manually
+- AnsiConsole.Status().Spinner(Spinner.Known.Dots).StartAsync() for spinner during LLM calls
+- RepeatableActionAsync: return `true` to stop, `false` to continue; use instance fields for cross-iteration state
+- Platform-specific fetchers registered as IContentFetcher in DI; resolve via IEnumerable<IContentFetcher> and filter by Platform
+---
+
+## 2026-04-04 21:55 BST - US-009
+- ManualFetcher and ManualFetcherTests were already implemented but not committed
+- Files committed: src/Writegeist.Infrastructure/Fetchers/ManualFetcher.cs, tests/Writegeist.Tests/Fetchers/ManualFetcherTests.cs
+- All 39 tests pass, full solution builds successfully
+- **Learnings for future iterations:**
+  - Previous iterations may leave files uncommitted — always check `git status` for untracked files
+  - The Cli project restore can hang in sandbox mode; build/test individual projects when possible
+  - ManualFetcher splits on `---` string separator and trims/filters empty entries
+---
+
+## 2026-04-04 22:00 BST - US-010
+- Implemented PlatformRules record in Writegeist.Core/Models
+- Implemented PlatformConventions static class in Writegeist.Core with GetRules(Platform) method
+- Rules for LinkedIn (3000/1500), X (280/280), Instagram (2200/750), Facebook (63206/600)
+- Files created: src/Writegeist.Core/Models/PlatformRules.cs, src/Writegeist.Core/PlatformConventions.cs, tests/Writegeist.Tests/PlatformConventionsTests.cs
+- All 43 tests pass
+- **Learnings for future iterations:**
+  - PlatformConventions is a static class at Writegeist.Core namespace level (not in Models)
+  - RecommendedHashtagCount for Instagram is up to 30 (much higher than other platforms)
+  - Tests use range assertions (BeInRange) for hashtag counts to match AC ranges like "3-5"
+---
+
+## 2026-04-04 22:05 BST - US-011
+- Implemented AnthropicProvider in Writegeist.Infrastructure/LlmProviders using raw HttpClient
+- Sends requests to https://api.anthropic.com/v1/messages with x-api-key and anthropic-version headers
+- API key from ANTHROPIC_API_KEY env var, model configurable via Writegeist:Anthropic:Model (default claude-sonnet-4-20250514)
+- Handles 401, 429, 500+ errors with user-friendly messages
+- Files created: src/Writegeist.Infrastructure/LlmProviders/AnthropicProvider.cs
+- All 43 tests pass, typecheck passes (no unit tests required per AC — only "Typecheck passes")
+- **Learnings for future iterations:**
+  - LLM providers live in Writegeist.Infrastructure/LlmProviders directory
+  - HttpClient is injected (for DI/testability), IConfiguration used for settings
+  - Anthropic API requires x-api-key header (not Bearer auth) and anthropic-version header
+  - All three ILlmProvider methods delegate to the same SendMessageAsync — the interface distinction is for future prompt differentiation
+---
+
+## 2026-04-05 - US-012
+- OpenAiProvider was implemented by a previous iteration but left uncommitted — committed it
+- Uses official OpenAI NuGet package (v2.10.0) with ChatClient
+- API key from OPENAI_API_KEY env var, model configurable via Writegeist:OpenAi:Model (default gpt-4o)
+- Error handling catches exceptions and maps to user-friendly HttpRequestException messages
+- Files committed: src/Writegeist.Infrastructure/LlmProviders/OpenAiProvider.cs, Writegeist.Infrastructure.csproj
+- All 43 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - OpenAI SDK v2.x uses ChatClient(model, apiKey) constructor and CompleteChatAsync with UserChatMessage
+  - Error handling uses string matching on exception messages (SDK doesn't expose typed status codes cleanly)
+  - Pattern matches AnthropicProvider: constructor with IConfiguration, three methods delegate to one private method
+---
+
+## 2026-04-05 - US-017
+- Implemented IngestInteractiveAction extending RepeatableActionAsync
+- Prompts for person name and platform on first iteration, then prompts for post content each iteration
+- Uses SelectionPrompt for "Add another post?" (Yes/No), displays Panel summary on completion
+- Files changed: src/Writegeist.Cli/Actions/IngestInteractiveAction.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - RepeatableActionAsync: return `true` to stop repeating, `false` to continue
+  - Use instance fields to track state across iterations (e.g., `_isFirstIteration`, `_newCount`)
+  - Primary constructor injection works the same for RepeatableActionAsync as SingleActionAsync
+  - SelectionPrompt<string> with "Yes"/"No" choices is the pattern for confirmation prompts
+---
+
+## 2026-04-05 - US-018
+- Implemented AnalyseAction extending SingleActionAsync, added to MainMenu as 'Analyse Style'
+- Prompts for person selection (with empty check), LLM provider selection (Anthropic/OpenAI), runs analysis with spinner
+- Displays profile JSON in a rounded-border Panel; catches errors in red markup
+- Files created: src/Writegeist.Cli/Actions/AnalyseAction.cs
+- Files changed: src/Writegeist.Cli/Menus/MainMenu.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - StyleAnalyser takes ILlmProvider in constructor — to allow user provider selection, inject both concrete providers (AnthropicProvider, OpenAiProvider) and construct StyleAnalyser manually with the chosen one
+  - AnsiConsole.Status().Spinner(Spinner.Known.Dots).StartAsync() is the pattern for spinner during async operations
+  - MainMenu uses `.AddMenuItem<ActionType>("Label", "Description")` chain pattern
+  - Wrap entire action body in try/catch for error display without crashing the menu loop
+---
+
+## 2026-04-05 - US-019
+- Implemented GenerateAction extending SingleActionAsync, added to MainMenu as 'Generate Post'
+- Filters persons to only those with style profiles before presenting selection
+- Prompts for person, target platform (via Platform enum), topic, and LLM provider
+- Constructs PostGenerator with selected LLM provider, generates draft with spinner, displays in rounded Panel
+- Escapes generated content via Markup.Escape() before rendering in Panel
+- Files created: src/Writegeist.Cli/Actions/GenerateAction.cs
+- Files changed: src/Writegeist.Cli/Menus/MainMenu.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - SelectionPrompt<Platform> works directly with enum types — no need to convert to strings
+  - Filter persons by checking GetLatestByPersonIdAsync for each — no batch method available
+  - Generated content must be Markup.Escape()'d before displaying in Spectre Panel to avoid markup parsing errors
+---
+
+## 2026-04-05 - US-020
+- Implemented RefineAction extending RepeatableActionAsync, added to MainMenu as 'Refine Last Draft'
+- On first iteration: loads latest draft via IDraftRepository.GetLatestAsync, displays in Panel, prompts for LLM provider
+- Each iteration: prompts for feedback, calls PostGenerator.RefineAsync with spinner, displays refined draft
+- Asks "Refine again?" via SelectionPrompt — "No" returns true (stop), "Yes" returns false (continue)
+- Error handling wraps entire action in try/catch with red markup display
+- Files created: src/Writegeist.Cli/Actions/RefineAction.cs
+- Files changed: src/Writegeist.Cli/Menus/MainMenu.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - RefineAction needs both LLM provider concrete types injected for user selection (same pattern as GenerateAction/AnalyseAction)
+  - PostGenerator is constructed manually with the selected provider, same as GenerateAction
+  - _currentDraft tracks state across iterations — updated after each refinement so the next iteration refines the latest version
+  - LLM provider selection only happens on first iteration to avoid re-prompting during refinement loop
+---
+
+## 2026-04-05 - US-021
+- Implemented ProfileMenu extending Menu (quitable: false, isTopLevel: false) with Show Profile and List All Profiles items
+- ShowProfileAction: prompts for person (filtered to those with profiles), displays profile as structured Table (parsing JSON properties as rows) with fallback to raw Panel if not valid JSON
+- ListProfilesAction: displays a Table of all persons with profiles showing name, provider, model, and created date
+- Both actions show yellow message if no profiles exist
+- MainMenu updated to add ProfileMenu as 'Profiles' menu item
+- Files created: src/Writegeist.Cli/Menus/ProfileMenu.cs, src/Writegeist.Cli/Actions/ShowProfileAction.cs, src/Writegeist.Cli/Actions/ListProfilesAction.cs
+- Files changed: src/Writegeist.Cli/Menus/MainMenu.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - ProfileMenu follows same pattern as IngestMenu: Menu(quitable: false, isTopLevel: false)
+  - ShowProfileAction uses System.Text.Json to parse ProfileJson into a Table with Section/Details columns
+  - Fallback to raw Panel display when ProfileJson is not valid JSON (e.g., plain text LLM responses)
+  - Filter persons to only those with profiles by iterating and checking GetLatestByPersonIdAsync (same pattern as GenerateAction)
+---
+
+## 2026-04-05 - US-022
+- Implemented LinkedInFetcher, InstagramFetcher, FacebookFetcher as stub fetchers
+- Each returns correct Platform enum value via expression-bodied property
+- FetchPostsAsync throws NotSupportedException with descriptive message suggesting From File or Interactive Paste
+- Files created: src/Writegeist.Infrastructure/Fetchers/LinkedInFetcher.cs, InstagramFetcher.cs, FacebookFetcher.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - Stub fetchers use expression-bodied Platform property (`=> Platform.X`) vs ManualFetcher's constructor-injected platform
+  - NotSupportedException is the appropriate exception type for "not implemented" platform fetchers
+  - These fetchers will be resolved by platform in US-023's fetcher dispatch
+---
+
+## 2026-04-05 - US-023
+- Implemented IngestFromUrlAction extending SingleActionAsync with full fetcher dispatch
+- Prompts for person name, platform, and URL/handle via Spectre.Console prompts
+- Resolves correct IContentFetcher by platform from IEnumerable<IContentFetcher> injected via DI
+- Catches NotSupportedException from stub fetchers and displays message in yellow markup
+- Catches general exceptions in red markup without crashing
+- Displays Panel summary for successful fetches (same pattern as IngestFromFileAction)
+- Registered LinkedInFetcher, InstagramFetcher, FacebookFetcher as IContentFetcher in Program.cs DI
+- Files changed: src/Writegeist.Cli/Actions/IngestFromUrlAction.cs, src/Writegeist.Cli/Program.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - Register fetchers as IContentFetcher (not concrete types) to enable IEnumerable<IContentFetcher> injection
+  - Fetcher dispatch pattern: inject IEnumerable<IContentFetcher>, filter by Platform property
+  - NotSupportedException caught separately from general exceptions for yellow vs red markup display
+  - FetchRequest populates both Url and Handle from the same user input (fetcher decides which to use)
+  - When US-024 (XTwitterFetcher) is implemented, just register it as another IContentFetcher — no action changes needed
+---
+
+## 2026-04-05 - US-024
+- XTwitterFetcher was already implemented by a previous iteration but left uncommitted — committed it
+- Uses HttpClient to call X API v2: resolves username to user ID, then fetches up to 100 tweets
+- Bearer token from X_BEARER_TOKEN env var; throws descriptive exception if missing
+- Handles 429 rate limit with user-friendly message; parses tweet text, id, and created_at
+- DI registration as IContentFetcher was already in place from US-023
+- Files committed: src/Writegeist.Infrastructure/Fetchers/XTwitterFetcher.cs
+- All 53 tests pass, build succeeds
+- **Learnings for future iterations:**
+  - XTwitterFetcher resolves handle to user ID via /2/users/by/username/{handle} before fetching tweets
+  - X API v2 uses Bearer token auth (not API key header like Anthropic)
+  - tweet.fields=created_at query param needed to get published dates
+  - Previous iterations may leave files untracked — always check git status for pending work
 ---

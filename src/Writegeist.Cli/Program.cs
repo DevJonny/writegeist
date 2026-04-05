@@ -46,6 +46,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<IContentFetcher, LinkedInFetcher>();
         services.AddSingleton<IContentFetcher, InstagramFetcher>();
         services.AddSingleton<IContentFetcher, FacebookFetcher>();
+        services.AddSingleton<IContentFetcher, XTwitterFetcher>();
 
         // Services
         services.AddSingleton<StyleAnalyser>();
