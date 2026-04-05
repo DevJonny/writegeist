@@ -8,7 +8,11 @@ using Writegeist.Core.Interfaces;
 using Writegeist.Core.Services;
 using Writegeist.Infrastructure.Fetchers;
 using Writegeist.Infrastructure.LlmProviders;
+using Writegeist.Cli;
 using Writegeist.Infrastructure.Persistence;
+
+// Load .env file before building configuration
+EnvironmentPrompt.LoadEnvFile();
 
 var configuration = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json", optional: true)
@@ -26,6 +30,9 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<IPostRepository, SqlitePostRepository>();
         services.AddSingleton<IStyleProfileRepository, SqliteStyleProfileRepository>();
         services.AddSingleton<IDraftRepository, SqliteDraftRepository>();
+
+        // Secrets
+        services.AddSingleton<ISecretProvider, EnvironmentPrompt>();
 
         // LLM providers
         services.AddSingleton<AnthropicProvider>();

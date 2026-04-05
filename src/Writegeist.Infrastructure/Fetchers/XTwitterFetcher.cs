@@ -1,12 +1,11 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Writegeist.Core.Interfaces;
 using Writegeist.Core.Models;
 
 namespace Writegeist.Infrastructure.Fetchers;
 
-public class XTwitterFetcher(IHttpClientFactory httpClientFactory, IConfiguration configuration) : IContentFetcher
+public class XTwitterFetcher(IHttpClientFactory httpClientFactory, ISecretProvider secrets) : IContentFetcher
 {
     private const string BaseUrl = "https://api.x.com/2";
     private const int MaxResults = 100;
@@ -15,10 +14,7 @@ public class XTwitterFetcher(IHttpClientFactory httpClientFactory, IConfiguratio
 
     public async Task<IReadOnlyList<FetchedPost>> FetchPostsAsync(FetchRequest request)
     {
-        var bearerToken = configuration["X_BEARER_TOKEN"]
-            ?? throw new InvalidOperationException(
-                "X/Twitter Bearer Token is not configured. " +
-                "Set the X_BEARER_TOKEN environment variable, or use 'From File' or 'Interactive Paste' to import posts manually.");
+        var bearerToken = secrets.Require("X_BEARER_TOKEN", "X/Twitter Bearer Token");
 
         var input = request.Handle ?? request.Url
             ?? throw new ArgumentException("A handle or URL is required to fetch tweets.", nameof(request));

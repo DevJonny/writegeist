@@ -8,18 +8,24 @@ public class OpenAiProvider : ILlmProvider
 {
     private const string DefaultModel = "gpt-4o";
 
-    private readonly ChatClient _chatClient;
+    private readonly ISecretProvider _secrets;
     private readonly string _model;
+    private ChatClient? _chatClient;
 
-    public OpenAiProvider(IConfiguration configuration)
+    public OpenAiProvider(ISecretProvider secrets, IConfiguration configuration)
     {
-        var apiKey = configuration["OPENAI_API_KEY"]
-                     ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-                     ?? throw new InvalidOperationException(
-                         "OpenAI API key is not configured. Set the OPENAI_API_KEY environment variable.");
-
+        _secrets = secrets;
         _model = configuration["Writegeist:OpenAi:Model"] ?? DefaultModel;
+    }
+
+    private ChatClient GetClient()
+    {
+        if (_chatClient is not null)
+            return _chatClient;
+
+        var apiKey = _secrets.Require("OPENAI_API_KEY", "OpenAI API key");
         _chatClient = new ChatClient(_model, apiKey);
+        return _chatClient;
     }
 
     public string ProviderName => "openai";
@@ -35,7 +41,7 @@ public class OpenAiProvider : ILlmProvider
     {
         try
         {
-            var completion = await _chatClient.CompleteChatAsync(
+            var completion = await GetClient().CompleteChatAsync(
                 [new UserChatMessage(prompt)]);
 
             return completion.Value.Content[0].Text

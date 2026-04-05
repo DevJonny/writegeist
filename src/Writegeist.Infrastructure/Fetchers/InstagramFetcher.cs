@@ -1,11 +1,10 @@
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Writegeist.Core.Interfaces;
 using Writegeist.Core.Models;
 
 namespace Writegeist.Infrastructure.Fetchers;
 
-public class InstagramFetcher(IHttpClientFactory httpClientFactory, IConfiguration configuration) : IContentFetcher
+public class InstagramFetcher(IHttpClientFactory httpClientFactory, ISecretProvider secrets) : IContentFetcher
 {
     private const string BaseUrl = "https://graph.instagram.com/v25.0";
     private const string MediaFields = "id,caption,media_type,timestamp,permalink";
@@ -15,10 +14,7 @@ public class InstagramFetcher(IHttpClientFactory httpClientFactory, IConfigurati
 
     public async Task<IReadOnlyList<FetchedPost>> FetchPostsAsync(FetchRequest request)
     {
-        var accessToken = configuration["INSTAGRAM_ACCESS_TOKEN"]
-            ?? throw new InvalidOperationException(
-                "Instagram Access Token is not configured. " +
-                "Set the INSTAGRAM_ACCESS_TOKEN environment variable, or use 'From File' or 'Interactive Paste' to import posts manually.");
+        var accessToken = secrets.Require("INSTAGRAM_ACCESS_TOKEN", "Instagram Access Token");
 
         var httpClient = httpClientFactory.CreateClient();
         return await FetchMediaAsync(httpClient, accessToken);

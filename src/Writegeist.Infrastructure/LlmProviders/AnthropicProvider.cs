@@ -13,17 +13,13 @@ public class AnthropicProvider : ILlmProvider
     private const string ApiVersion = "2023-06-01";
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly string _apiKey;
+    private readonly ISecretProvider _secrets;
     private readonly string _model;
 
-    public AnthropicProvider(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    public AnthropicProvider(IHttpClientFactory httpClientFactory, ISecretProvider secrets, IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
-        _apiKey = configuration["ANTHROPIC_API_KEY"]
-                  ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
-                  ?? throw new InvalidOperationException(
-                      "Anthropic API key is not configured. Set the ANTHROPIC_API_KEY environment variable.");
-
+        _secrets = secrets;
         _model = configuration["Writegeist:Anthropic:Model"] ?? DefaultModel;
     }
 
@@ -51,7 +47,7 @@ public class AnthropicProvider : ILlmProvider
         var json = JsonSerializer.Serialize(requestBody);
         using var request = new HttpRequestMessage(HttpMethod.Post, ApiBaseUrl);
         request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-        request.Headers.Add("x-api-key", _apiKey);
+        request.Headers.Add("x-api-key", _secrets.Require("ANTHROPIC_API_KEY", "Anthropic API key"));
         request.Headers.Add("anthropic-version", ApiVersion);
 
         using var httpClient = _httpClientFactory.CreateClient();
