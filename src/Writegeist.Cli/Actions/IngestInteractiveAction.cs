@@ -54,7 +54,7 @@ public class IngestInteractiveAction(
         if (addAnother == "No")
         {
             AnsiConsole.Write(new Panel(
-                $"[green]Ingested {_newCount} new post(s)[/] for [bold]{_person.Name}[/] from {_platform}" +
+                $"[green]Ingested {_newCount} new post(s)[/] for [bold]{Markup.Escape(_person.Name)}[/] from {_platform}" +
                 (_dupCount > 0 ? $" ([yellow]{_dupCount} duplicate(s) skipped[/])" : ""))
                 .Header("Ingest Complete"));
             return true;

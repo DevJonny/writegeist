@@ -6,7 +6,7 @@ using Writegeist.Core.Models;
 
 namespace Writegeist.Infrastructure.Fetchers;
 
-public class XTwitterFetcher(HttpClient httpClient, IConfiguration configuration) : IContentFetcher
+public class XTwitterFetcher(IHttpClientFactory httpClientFactory, IConfiguration configuration) : IContentFetcher
 {
     private const string BaseUrl = "https://api.x.com/2";
     private const int MaxResults = 100;
@@ -20,16 +20,21 @@ public class XTwitterFetcher(HttpClient httpClient, IConfiguration configuration
                 "X/Twitter Bearer Token is not configured. " +
                 "Set the X_BEARER_TOKEN environment variable, or use 'From File' or 'Interactive Paste' to import posts manually.");
 
-        var handle = (request.Handle ?? request.Url)?.TrimStart('@')
+        var input = request.Handle ?? request.Url
             ?? throw new ArgumentException("A handle or URL is required to fetch tweets.", nameof(request));
 
+        var handle = input.TrimStart('@');
+        if (Uri.TryCreate(handle, UriKind.Absolute, out var uri))
+            handle = uri.AbsolutePath.Trim('/').Split('/')[0];
+
+        var httpClient = httpClientFactory.CreateClient();
         httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
 
-        var userId = await ResolveUserIdAsync(handle);
-        return await FetchTweetsAsync(userId);
+        var userId = await ResolveUserIdAsync(httpClient, handle);
+        return await FetchTweetsAsync(httpClient, userId);
     }
 
-    private async Task<string> ResolveUserIdAsync(string handle)
+    private static async Task<string> ResolveUserIdAsync(HttpClient httpClient, string handle)
     {
         var response = await httpClient.GetAsync($"{BaseUrl}/users/by/username/{handle}");
 
@@ -52,7 +57,7 @@ public class XTwitterFetcher(HttpClient httpClient, IConfiguration configuration
             ?? throw new HttpRequestException("Could not resolve X user ID.");
     }
 
-    private async Task<IReadOnlyList<FetchedPost>> FetchTweetsAsync(string userId)
+    private static async Task<IReadOnlyList<FetchedPost>> FetchTweetsAsync(HttpClient httpClient, string userId)
     {
         var url = $"{BaseUrl}/users/{userId}/tweets?max_results={MaxResults}&tweet.fields=created_at";
         var response = await httpClient.GetAsync(url);
@@ -78,7 +83,7 @@ public class XTwitterFetcher(HttpClient httpClient, IConfiguration configuration
 
             DateTime? publishedAt = null;
             if (tweet.TryGetProperty("created_at", out var createdAt))
-                publishedAt = DateTime.Parse(createdAt.GetString()!);
+                publishedAt = DateTime.Parse(createdAt.GetString()!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
 
             posts.Add(new FetchedPost(content, sourceUrl, publishedAt));
         }

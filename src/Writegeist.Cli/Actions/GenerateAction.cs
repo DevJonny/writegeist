@@ -58,7 +58,12 @@ public class GenerateAction(
                 new TextPrompt<string>("Enter topic/key points:"));
 
             var defaultProvider = configuration["Writegeist:DefaultProvider"] ?? "anthropic";
-            var providerChoices = new[] { "Anthropic", "OpenAI" };
+            var defaultChoice = defaultProvider.Equals("openai", StringComparison.OrdinalIgnoreCase)
+                ? "OpenAI"
+                : "Anthropic";
+            var providerChoices = defaultChoice == "OpenAI"
+                ? new[] { "OpenAI", "Anthropic" }
+                : new[] { "Anthropic", "OpenAI" };
 
             var selectedProvider = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()

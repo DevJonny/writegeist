@@ -84,7 +84,7 @@ public class SqlitePersonRepository : IPersonRepository
         {
             Id = reader.GetInt32(0),
             Name = reader.GetString(1),
-            CreatedAt = DateTime.Parse(reader.GetString(2))
+            CreatedAt = DateTime.Parse(reader.GetString(2), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal)
         };
     }
 }

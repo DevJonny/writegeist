@@ -17,13 +17,30 @@ public class ManualFetcher : IContentFetcher
         if (string.IsNullOrWhiteSpace(request.FilePath))
             throw new ArgumentException("FilePath is required for file import.", nameof(request));
 
-        var content = await File.ReadAllTextAsync(request.FilePath);
-        var posts = content
-            .Split(["---"], StringSplitOptions.None)
-            .Select(p => p.Trim())
-            .Where(p => !string.IsNullOrEmpty(p))
-            .Select(p => new FetchedPost(p))
-            .ToList();
+        var lines = await File.ReadAllLinesAsync(request.FilePath);
+        var posts = new List<FetchedPost>();
+        var current = new List<string>();
+
+        foreach (var line in lines)
+        {
+            if (line.Trim() == "---")
+            {
+                if (current.Count > 0)
+                {
+                    posts.Add(new FetchedPost(string.Join(Environment.NewLine, current).Trim()));
+                    current.Clear();
+                }
+            }
+            else
+            {
+                current.Add(line);
+            }
+        }
+
+        if (current.Count > 0)
+            posts.Add(new FetchedPost(string.Join(Environment.NewLine, current).Trim()));
+
+        posts.RemoveAll(p => string.IsNullOrEmpty(p.Content));
 
         return posts;
     }

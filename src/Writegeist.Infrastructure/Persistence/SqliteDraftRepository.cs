@@ -94,7 +94,7 @@ public class SqliteDraftRepository : IDraftRepository
             Feedback = reader.IsDBNull(7) ? null : reader.GetString(7),
             Provider = reader.GetString(8),
             Model = reader.GetString(9),
-            CreatedAt = DateTime.Parse(reader.GetString(10))
+            CreatedAt = DateTime.Parse(reader.GetString(10), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal)
         };
     }
 }
