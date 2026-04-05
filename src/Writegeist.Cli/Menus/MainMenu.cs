@@ -11,6 +11,7 @@ public class MainMenu() : Menu(quitable: true, isTopLevel: true)
             .AddMenuItem<IngestMenu>("Ingest Posts", "Import posts from files, URLs, or paste interactively")
             .AddMenuItem<AnalyseAction>("Analyse Style", "Analyse posts and build a style profile")
             .AddMenuItem<GenerateAction>("Generate Post", "Generate a new post in your style")
-            .AddMenuItem<RefineAction>("Refine Last Draft", "Iteratively refine the last generated draft with feedback");
+            .AddMenuItem<RefineAction>("Refine Last Draft", "Iteratively refine the last generated draft with feedback")
+            .AddMenuItem<ProfileMenu>("Profiles", "View and list style profiles");
     }
 }
