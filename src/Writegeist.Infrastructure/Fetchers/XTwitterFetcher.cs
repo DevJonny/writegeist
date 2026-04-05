@@ -1,0 +1,88 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using Writegeist.Core.Interfaces;
+using Writegeist.Core.Models;
+
+namespace Writegeist.Infrastructure.Fetchers;
+
+public class XTwitterFetcher(HttpClient httpClient, IConfiguration configuration) : IContentFetcher
+{
+    private const string BaseUrl = "https://api.x.com/2";
+    private const int MaxResults = 100;
+
+    public Platform Platform => Platform.X;
+
+    public async Task<IReadOnlyList<FetchedPost>> FetchPostsAsync(FetchRequest request)
+    {
+        var bearerToken = configuration["X_BEARER_TOKEN"]
+            ?? throw new InvalidOperationException(
+                "X/Twitter Bearer Token is not configured. " +
+                "Set the X_BEARER_TOKEN environment variable, or use 'From File' or 'Interactive Paste' to import posts manually.");
+
+        var handle = (request.Handle ?? request.Url)?.TrimStart('@')
+            ?? throw new ArgumentException("A handle or URL is required to fetch tweets.", nameof(request));
+
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+
+        var userId = await ResolveUserIdAsync(handle);
+        return await FetchTweetsAsync(userId);
+    }
+
+    private async Task<string> ResolveUserIdAsync(string handle)
+    {
+        var response = await httpClient.GetAsync($"{BaseUrl}/users/by/username/{handle}");
+
+        if ((int)response.StatusCode == 429)
+            throw new HttpRequestException(
+                "X API rate limit exceeded. Please wait a few minutes and try again.");
+
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        if (doc.RootElement.TryGetProperty("errors", out var errors))
+        {
+            var message = errors[0].GetProperty("detail").GetString();
+            throw new HttpRequestException($"X API error: {message}");
+        }
+
+        return doc.RootElement.GetProperty("data").GetProperty("id").GetString()
+            ?? throw new HttpRequestException("Could not resolve X user ID.");
+    }
+
+    private async Task<IReadOnlyList<FetchedPost>> FetchTweetsAsync(string userId)
+    {
+        var url = $"{BaseUrl}/users/{userId}/tweets?max_results={MaxResults}&tweet.fields=created_at";
+        var response = await httpClient.GetAsync(url);
+
+        if ((int)response.StatusCode == 429)
+            throw new HttpRequestException(
+                "X API rate limit exceeded. Please wait a few minutes and try again.");
+
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        if (!doc.RootElement.TryGetProperty("data", out var data))
+            return [];
+
+        var posts = new List<FetchedPost>();
+        foreach (var tweet in data.EnumerateArray())
+        {
+            var content = tweet.GetProperty("text").GetString() ?? string.Empty;
+            var tweetId = tweet.GetProperty("id").GetString();
+            var sourceUrl = tweetId is not null ? $"https://x.com/i/status/{tweetId}" : null;
+
+            DateTime? publishedAt = null;
+            if (tweet.TryGetProperty("created_at", out var createdAt))
+                publishedAt = DateTime.Parse(createdAt.GetString()!);
+
+            posts.Add(new FetchedPost(content, sourceUrl, publishedAt));
+        }
+
+        return posts;
+    }
+}
