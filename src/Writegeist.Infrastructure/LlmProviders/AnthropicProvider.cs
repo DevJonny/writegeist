@@ -12,13 +12,13 @@ public class AnthropicProvider : ILlmProvider
     private const string DefaultModel = "claude-sonnet-4-20250514";
     private const string ApiVersion = "2023-06-01";
 
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _apiKey;
     private readonly string _model;
 
-    public AnthropicProvider(HttpClient httpClient, IConfiguration configuration)
+    public AnthropicProvider(IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _apiKey = configuration["ANTHROPIC_API_KEY"]
                   ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
                   ?? throw new InvalidOperationException(
@@ -54,7 +54,8 @@ public class AnthropicProvider : ILlmProvider
         request.Headers.Add("x-api-key", _apiKey);
         request.Headers.Add("anthropic-version", ApiVersion);
 
-        using var response = await _httpClient.SendAsync(request);
+        using var httpClient = _httpClientFactory.CreateClient();
+        using var response = await httpClient.SendAsync(request);
 
         var responseBody = await response.Content.ReadAsStringAsync();
 

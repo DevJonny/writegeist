@@ -20,11 +20,15 @@ public class SqliteDatabase
         using var connection = new SqliteConnection(_connectionString);
         connection.Open();
 
+        using var pragmaCommand = connection.CreateCommand();
+        pragmaCommand.CommandText = "PRAGMA foreign_keys = ON;";
+        pragmaCommand.ExecuteNonQuery();
+
         using var command = connection.CreateCommand();
         command.CommandText = """
             CREATE TABLE IF NOT EXISTS persons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 

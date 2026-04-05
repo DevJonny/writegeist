@@ -106,7 +106,7 @@ public class SqlitePostRepository : IPostRepository
             Content = reader.GetString(3),
             ContentHash = reader.GetString(4),
             SourceUrl = reader.IsDBNull(5) ? null : reader.GetString(5),
-            FetchedAt = DateTime.Parse(reader.GetString(6))
+            FetchedAt = DateTime.Parse(reader.GetString(6), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal)
         };
     }
 }

@@ -30,7 +30,7 @@ var host = Host.CreateDefaultBuilder(args)
         // LLM providers
         services.AddSingleton<AnthropicProvider>();
         services.AddSingleton<OpenAiProvider>();
-        services.AddSingleton<HttpClient>();
+        services.AddHttpClient();
         services.AddSingleton<ILlmProvider>(sp =>
         {
             var config = sp.GetRequiredService<IConfiguration>();

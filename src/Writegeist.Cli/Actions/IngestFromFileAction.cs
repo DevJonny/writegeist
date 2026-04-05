@@ -56,7 +56,7 @@ public class IngestFromFileAction(
             }
 
             AnsiConsole.Write(new Panel(
-                $"[green]Ingested {newCount} new post(s)[/] for [bold]{personName}[/] from {platform}" +
+                $"[green]Ingested {newCount} new post(s)[/] for [bold]{Markup.Escape(personName)}[/] from {platform}" +
                 (dupCount > 0 ? $" ([yellow]{dupCount} duplicate(s) skipped[/])" : ""))
                 .Header("Ingest Complete"));
         }

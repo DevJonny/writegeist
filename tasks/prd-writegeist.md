@@ -21,7 +21,7 @@ The tool uses an interactive menu-driven interface (via DevJonny.InteractiveCli)
 **Description:** As a developer, I need the .NET solution structure created with all projects, references, and NuGet packages so that I can start building features.
 
 **Acceptance Criteria:**
-- [ ] `Writegeist.sln` with four projects: `Writegeist.Cli`, `Writegeist.Core`, `Writegeist.Infrastructure`, `Writegeist.Tests`
+- [ ] `Writegeist.slnx` with four projects: `Writegeist.Cli`, `Writegeist.Core`, `Writegeist.Infrastructure`, `Writegeist.Tests`
 - [ ] Project references wired: Cli → Core + Infrastructure, Infrastructure → Core, Tests → Core + Infrastructure
 - [ ] `Writegeist.Cli` references `DevJonny.InteractiveCli` NuGet package
 - [ ] `Writegeist.Infrastructure` references `Microsoft.Data.Sqlite`, `AngleSharp`, `Anthropic` (or raw HTTP fallback), `OpenAI`

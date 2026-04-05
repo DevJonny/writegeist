@@ -94,7 +94,7 @@ public class SqliteStyleProfileRepository : IStyleProfileRepository
             ProfileJson = reader.GetString(2),
             Provider = reader.GetString(3),
             Model = reader.GetString(4),
-            CreatedAt = DateTime.Parse(reader.GetString(5))
+            CreatedAt = DateTime.Parse(reader.GetString(5), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal)
         };
     }
 }

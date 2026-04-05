@@ -34,10 +34,12 @@ public class AnalyseAction(
             var person = persons.First(p => p.Name == selectedPerson);
 
             var defaultProvider = configuration["Writegeist:DefaultProvider"] ?? "anthropic";
-            var providerChoices = new[] { "Anthropic", "OpenAI" };
             var defaultChoice = defaultProvider.Equals("openai", StringComparison.OrdinalIgnoreCase)
                 ? "OpenAI"
                 : "Anthropic";
+            var providerChoices = defaultChoice == "OpenAI"
+                ? new[] { "OpenAI", "Anthropic" }
+                : new[] { "Anthropic", "OpenAI" };
 
             var selectedProvider = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
